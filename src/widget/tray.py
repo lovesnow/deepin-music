@@ -118,7 +118,7 @@ class BaseTrayIcon(object):
         self.instance.toggle_visible(True)
         self.set_visible(False)
 
-class TrayIcon(gtk.StatusIcon, BaseTrayIcon):
+class GtkTrayIcon(gtk.StatusIcon, BaseTrayIcon):
 
     def __init__(self, instance):
         gtk.StatusIcon.__init__(self)
@@ -127,44 +127,63 @@ class TrayIcon(gtk.StatusIcon, BaseTrayIcon):
     def get_menu_position(self, menu, icon):
         return gtk.status_icon_position_menu(menu, icon)
 
-class TestTrayIcon(object):
+class AppindicatorTrayIcon(object):
 
     def __init__(self, instance):
-        self._statusicon = None
-        self.show_statusicon()
+        self.instance = instance
+        self._setup_menu()
+        self.app = self._setup_appindicator()
 
-    def _setup_status_icon(self):
-        menu = gtk.Menu()
-        try:
-            import appindicator
-        except ImportError:
-            appindicator = None
-        else:
-            ## make sure dbus is available, else appindicator crashes
-            import dbus
-            try:
-                dbus.Bus()
-            except dbus.DBusException:
-                appindicator = None
-        if appindicator:
-            return self._setup_appindicator(menu)
-        else:
-            return self._setup_gtk_status_icon(menu)
+    def _setup_menu(self):
+        self._main_menu = gtk.Menu()
+        self.add_menu_item("%s/%s" % (_("显示"), _("隐藏")), lambda obj: self.instance.toggle_visible())
+        self.add_separator_item()
+        self.add_menu_item("%s/%s" % (_("Play"), _("Pause")), lambda obj: Dispatcher.quit())
+        self.add_menu_item(_("Previous"), lambda obj: Player.previous())
+        self.add_menu_item(_("Next"), lambda obj: Player.next())
+        self.add_separator_item()
+        self.add_menu_item(_("Show Lyrics"), lambda obj: Dispatcher.show_lyrics())
+        self.add_menu_item(_("Unlock Lyrics"), lambda obj: Dispatcher.unlock_lyrics())
+        self.add_separator_item()        
+        self.add_menu_item(_("Preferences"), lambda obj: Dispatcher.show_setting())
+        self.add_menu_item(_("Quit"), lambda obj: Dispatcher.quit())
+        self._main_menu.show_all()
 
 
-    def _setup_appindicator(self, menu):
+    def _setup_appindicator(self):
         import appindicator
         indicator = appindicator.Indicator(PROGRAM_NAME_LONG,
-                                           "exaile",
+                                           "deepin-music-player",
                                            appindicator.CATEGORY_APPLICATION_STATUS)
         indicator.set_status(appindicator.STATUS_ACTIVE)
-        indicator.set_menu(menu)
+        indicator.set_menu(self._main_menu)
         return indicator
+    
+    def add_menu_item(self, label, callback):
+        menu_item = gtk.MenuItem(label=label)
+        menu_item.connect("activate", callback)
+        self._main_menu.append(menu_item)
+        
+    def add_separator_item(self):    
+        self._main_menu.append(gtk.SeparatorMenuItem())
+        
+    def destroy(self):
+        self.instance.toggle_visible(True)
 
-    def show_statusicon(self):
-        if not self._statusicon:
-            self._statusicon = self._setup_status_icon()
-        try:
-            self._statusicon.set_visible(True)
-        except AttributeError:
-            pass
+try:            
+    import appindicator
+except ImportError:    
+    appindicator = None
+else:    
+    import dbus
+    try:
+        dbus.Bus()
+    except dbus.DBusException:    
+        appindicator = None
+    if appindicator:    
+        TrayIcon = AppindicatorTrayIcon
+    else:    
+        TrayIcon = GtkTrayIcon
+        
+    
+    
